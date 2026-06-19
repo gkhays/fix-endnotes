@@ -50,3 +50,7 @@ npm run build
 
 - Obsidian 1.5.0 or later
 - Node.js 18 or later for running the local test suite
+
+## Acknowledgements
+
+Development of this plugin was assisted by GitHub Copilot.
