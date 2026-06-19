@@ -149,7 +149,7 @@ module.exports = class FixEndNotesPlugin extends Plugin {
     });
     this.addCommand({
       id: "normalize-end-notes-selection",
-      name: "Normalize end notes in selection",
+      name: "Fix end notes",
       editorCallback: (editor) => {
         const selection = editor.getSelection();
         if (selection.length === 0) {

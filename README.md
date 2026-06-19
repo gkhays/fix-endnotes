@@ -6,7 +6,7 @@ Fix End Notes is an Obsidian plugin that normalizes selected end notes and refer
 
 1. Open an Obsidian vault.
 2. Select the text you want to normalize.
-3. Run the command palette action named `Normalize end notes in selection`.
+3. Run the command palette action named `Fix end notes`.
 4. The selection is rewritten in place.
 
 If nothing is selected, the plugin shows a brief notice and makes no change.
