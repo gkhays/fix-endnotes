@@ -4,8 +4,8 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "build": "esbuild src/main.js --bundle --external:obsidian --outfile=dist/main.js --platform=node --format=cjs --allow-overwrite",
-    "dev": "esbuild src/main.js --bundle --external:obsidian --outfile=dist/main.js --platform=node --format=cjs --allow-overwrite --watch",
+    "build": "esbuild src/main.js --bundle --external:obsidian --outfile=main.js --platform=node --format=cjs --allow-overwrite",
+    "dev": "esbuild src/main.js --bundle --external:obsidian --outfile=main.js --platform=node --format=cjs --allow-overwrite --watch",
     "test": "node --test"
   },
   "devDependencies": {

@@ -18,7 +18,7 @@ This repository is already in the format Obsidian expects for a plugin. To insta
 1. Find your vault's plugin folder at `.obsidian/plugins/`.
 2. Create a folder named `fix-endnotes` inside that directory.
 3. Copy these files into the new folder:
-   - `dist/main.js` (as `dist/main.js`)
+   - `main.js`
    - `manifest.json`
 4. In Obsidian, go to Settings -> Community plugins.
 5. Turn off Restricted mode if needed.
@@ -38,7 +38,7 @@ Build the plugin with:
 npm run build
 ```
 
-`src/main.js` is the source entrypoint and generated output is written to `dist/main.js`. `src/normalize.js` contains the transformation logic covered by the test file in `test/`.
+`src/main.js` is the source entrypoint and generated output is written to `main.js` at the project root. `src/normalize.js` contains the transformation logic covered by the test file in `test/`.
 
 ## Behavior
 

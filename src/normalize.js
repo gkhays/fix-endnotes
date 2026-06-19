@@ -121,7 +121,7 @@ function normalizeBracketedSegment(segment) {
     return unwrappedList;
   }
 
-  if (!segment.startsWith("[[") || !segment.endsWith("]]")) {
+  if (!segment.startsWith("[[") || (!segment.endsWith("]]" ) && !segment.endsWith("]"))) {
     return segment;
   }
 
@@ -129,6 +129,12 @@ function normalizeBracketedSegment(segment) {
 
   if (wrappedMarkdownLink) {
     return wrappedMarkdownLink[1];
+  }
+
+  const singlyWrappedMarkdownLink = segment.match(/^\[\[([\s\S]+\]\([^\)\n]+\))\]$/);
+
+  if (singlyWrappedMarkdownLink) {
+    return `[${singlyWrappedMarkdownLink[1]}`;
   }
 
   const wrappedReference = segment.match(/^\[\[([\s\S]+?)\]\]$/);
@@ -146,6 +152,7 @@ function normalizeBracketedReferences(text) {
   for (let iteration = 0; iteration < 5; iteration += 1) {
     const next = unwrapBracketedMarkdownLinkList(normalized)
       .replace(/\[\[([\s\S]+\]\([^\)\n]+\))\]\]/g, (_match, link) => link)
+      .replace(/\[\[([\s\S]+\]\([^\)\n]+\))\]/g, (_match, link) => `[${link}`)
       .replace(/\[\[([\s\S]+?)\]\]/g, (_match, reference) => `[${reference}]`);
 
     if (next === normalized) {

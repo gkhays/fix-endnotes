@@ -17,6 +17,13 @@ test("removes redundant wrappers around a markdown link", () => {
   );
 });
 
+test("removes a single outer wrapper around a markdown link", () => {
+  assert.equal(
+    normalizeBracketedSegment("[[source](https://example.com)]"),
+    "[source](https://example.com)"
+  );
+});
+
 test("normalizes bracketed references inside surrounding text", () => {
   assert.equal(
     normalizeBracketedReferences("before [[note]] after"),
@@ -53,6 +60,15 @@ test("removes outer wrapper in surrounding text for markdown link lists", () => 
       "See [[1](https://a.example), [2](https://b.example)] for details"
     ),
     "See [1](https://a.example), [2](https://b.example) for details"
+  );
+});
+
+test("normalizes a citation after leading image markdown", () => {
+  assert.equal(
+    normalizeBracketedReferences(
+      "![Folder](https://example.com/folder.png) Step 2: Initialize Your Plugin Folder [[1](https://github.com/laantorchaweb/clone-vault)]"
+    ),
+    "![Folder](https://example.com/folder.png) Step 2: Initialize Your Plugin Folder [1](https://github.com/laantorchaweb/clone-vault)"
   );
 });
 
