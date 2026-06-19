@@ -4,6 +4,6 @@
   "version": "0.1.0",
   "minAppVersion": "1.5.0",
   "description": "Normalize selected end notes by removing redundant outer brackets.",
-  "author": "GitHub Copilot",
+  "author": "Garve Hays",
   "main": "main.js"
 }
