@@ -1,6 +1,6 @@
 # Fix End Notes
 
-Fix End Notes is an Obsidian plugin that normalizes selected end notes and references by removing redundant outer square brackets while preserving the inner text.
+Fix End Notes is an Obsidian plugin that normalizes selected end notes and references by preserving properly formatted inner markdown citation links and escaping decorative outer square brackets for correct Markdown and Obsidian display.
 
 ## Quick Start
 
@@ -42,15 +42,24 @@ npm run build
 
 ## Behavior
 
-- `[[reference]]` becomes `[reference]`
-- `[[[source](https://example.com)]]` becomes `[[source](https://example.com)]` (one outer wrapper removed)
-- `[[1](https://a.example), [2](https://b.example)]` becomes `[1](https://a.example), [2](https://b.example)`
+In practice, the plugin only changes the decorative outer citation wrapper and leaves inner links untouched.
+
+- `[[1](https://example.com)]` becomes `\[[1](https://example.com)\]`
+- `[[1](https://a.example), [2](https://b.example)]` becomes `\[[1](https://a.example), [2](https://b.example)\]`
+- Wrapper forms with multiline spacing are preserved internally and escaped at the outer boundary
 - Valid markdown links like `[source](https://example.com)` are preserved
+- Wiki-links like `[[wikilink]]` and unrelated bracketed text are preserved
 - Text outside the selected range is not modified, and running the command repeatedly is idempotent
+
+Before/After example:
+
+```text
+Before: See [[1](https://a.example), [2](https://b.example)] for details.
+After:  See \[[1](https://a.example), [2](https://b.example)\] for details.
+```
 
 Current limitations:
 
-- Single-link wrapper forms like `[[1](https://example.com)]` are currently preserved as-is
 - Extremely deep bracket nesting (more than 8 leading `[` characters) is left unchanged as a safety guard
 
 ## Requirements

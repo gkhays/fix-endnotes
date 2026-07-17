@@ -17,8 +17,9 @@ The current normalization flow in `src/normalize.js` relies on iterative global 
 1. Replace iterative brute-force rewriting with a parser-guided one-pass normalization strategy.
 2. Transform only verified malformed citation-wrapper patterns.
 3. Preserve valid markdown links, wiki links, and unrelated bracketed text.
-4. Ensure deterministic and idempotent behavior.
-5. Deliver the new approach through a smooth migration with clear rollback safety during transition.
+4. When properly formatted markdown citation links are enclosed by decorative outer square brackets, preserve the inner links and escape only the outer brackets (`\[` and `\]`) for correct Markdown/Obsidian display.
+5. Ensure deterministic and idempotent behavior.
+6. Deliver the new approach through a smooth migration with clear rollback safety during transition.
 
 ## Scope and Non-Goals
 
@@ -52,6 +53,7 @@ Exit criteria:
 1. Define strict match contract for what qualifies as a malformed citation-wrapper.
 2. Define strict non-match contract for content that must not change.
 3. Define idempotency requirement: repeated normalization must produce identical output.
+4. Define escaped-wrapper contract: `[[1](url), [2](url)]` normalizes to `\[[1](url), [2](url)\]` with no inner-link mutation.
 
 Exit criteria:
 
@@ -117,6 +119,7 @@ Exit criteria:
 2. End-note list lines (`[1] https://...`) are preserved or normalized only per contract.
 3. Nested URL parentheses remain intact after normalization.
 4. Multiline citation wrapper formatting normalizes without damaging inner links.
+5. Properly formatted citation links inside decorative outer brackets are preserved and emitted with escaped outer brackets.
 
 ### Required Negative Cases
 
@@ -124,12 +127,14 @@ Exit criteria:
 2. Non-citation bracketed prose is unchanged.
 3. Intentional wiki-links are unchanged unless explicitly covered by contract.
 4. Already-normalized text remains unchanged.
+5. Already escaped outer citation wrappers remain unchanged.
 
 ### Behavioral Guarantees
 
 1. Selection boundaries are respected (no external edits).
 2. Non-target text, spacing, and line breaks are preserved.
 3. Re-running normalization is a no-op.
+4. Escaped-wrapper normalization is idempotent (no double escaping).
 
 ## Risks and Mitigations
 
@@ -150,6 +155,26 @@ Exit criteria:
 6. Legacy path removed.
 7. Documentation updated.
 8. Full test suite passing.
+
+## No-Code Update Plan (Current Request)
+
+1. Documentation alignment
+   - Update `docs/END-NOTES.md` to define the preservation rule: keep inner markdown links intact and escape only outer decorative citation brackets.
+   - Update `docs/REFACTOR.md` contracts and test expectations to include the escaped-wrapper behavior.
+2. Contract examples to lock expected behavior
+   - Add explicit before/after examples for single-link and multi-link wrapper cases.
+   - Add explicit non-goals: no URL/label mutation, no spacing changes, no wiki-link rewrites.
+3. Test design (for next implementation step, no code in this phase)
+   - Positive contract cases for `[[1](url)]` and `[[1](a), [2](b)]` -> `\[[1](url)\]` and `\[[1](a), [2](b)\]`.
+   - Negative/idempotency cases for standalone links, already escaped wrappers, and unrelated bracketed prose.
+4. Implementation plan (next phase)
+   - Update normalization classifier to detect outer decorative citation wrappers containing valid markdown link items.
+   - Apply a targeted transform that escapes only wrapper boundaries.
+   - Keep one-pass deterministic behavior and preserve existing selection boundaries.
+5. Validation and rollout
+   - Run characterization and contract tests.
+   - Compare legacy vs new output on curated examples and document intentional divergences.
+   - Cut over after green tests and accepted divergence review.
 
 ## Ownership and File Touch Plan
 

@@ -22,10 +22,35 @@ In some cases, the "end-notes" may appear at the end of a prompt response in the
 
 In Markdown and Obsidian, the `[]` characters are special and signify part of a link, e.g. [description](<link>).
 
-However, when interacting with AI assistant output, Obsidian and Markdown view the "end-notes" as a nested link, e.g.
+However, when interacting with AI assistant output, Obsidian and Markdown can treat decorative outer brackets around citations as link syntax, e.g.
 
 [[1](<link1>), [2](<link2>)]
 
-Albeit a degenerate one as there is no parenthetical link-value in the outer link. When we encounter these, we want to escape them so they display properly, e.g.
+Albeit a degenerate one as there is no parenthetical link-value in the outer link. When we encounter these, we want to preserve the inner, properly formatted markdown links and escape only the outer decorative square brackets so they display properly, e.g.
 
 \[[1](<link1>), [2](<link2>)\]
+
+Where the outer, decorative square brackets are preserved.
+
+## Citation Preservation Convention
+
+When an AI assistant produces properly formatted markdown links and wraps the list in outer square brackets, normalization should preserve the links and only escape the wrapper.
+
+Rule:
+
+1. Input pattern: `[[n](url), [m](url)]`
+2. Output pattern: `\[[n](url), [m](url)\]`
+
+Examples:
+
+1. Input: `[[1](https://example.com)]`
+2. Output: `\[[1](https://example.com)\]`
+
+1. Input: `[[1](https://a.example), [2](https://b.example)]`
+2. Output: `\[[1](https://a.example), [2](https://b.example)\]`
+
+Non-goals for this rule:
+
+1. Do not rewrite valid standalone markdown links like `[1](https://example.com)`.
+2. Do not alter URLs, labels, ordering, punctuation, spacing, or line breaks inside the wrapper.
+3. Do not change wiki-links or unrelated bracketed text.

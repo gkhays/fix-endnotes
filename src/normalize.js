@@ -133,7 +133,7 @@ function detectMaxNestingDepth(text, startIndex) {
 
 /**
  * Classify a bracketed span [content] into one of three categories:
- * - 'citation-wrapper': Transform (remove outer brackets)
+ * - 'citation-wrapper': Transform (escape outer brackets)
  * - 'valid-markdown': Preserve (valid markdown link or link list)
  * - 'unrelated': Preserve (not a markdown construct)
  */
@@ -142,39 +142,28 @@ function classifyBracketedSpan(text, openIndex, closeIndex) {
     return "unrelated";
   }
 
-  // Must start with [[ to be a citation-wrapper
-  if (text[openIndex + 1] !== "[") {
-    // Could still be a valid markdown link: [label](url)
-    const markdownLinkMatch = parseMarkdownLinkAt(text, openIndex);
-    if (markdownLinkMatch === closeIndex + 1) {
-      return "valid-markdown";
-    }
+  // Preserve valid markdown links: [label](url)
+  const markdownLinkMatch = parseMarkdownLinkAt(text, openIndex);
+  if (markdownLinkMatch === closeIndex + 1) {
+    return "valid-markdown";
+  }
+
+  // Citation-wrapper in scope: outer [ ... ] where inner content starts with a markdown link.
+  // Example: [[1](url)] or [[1](a), [2](b)]
+  const singleLinkEnd = parseMarkdownLinkAt(text, openIndex + 1);
+
+  if (singleLinkEnd === null) {
     return "unrelated";
   }
 
-  // Starts with [[, so check what patterns it matches
-  
-  // Check if it's a bracketed markdown link list: [[links...]]
+  // Single wrapped markdown link: [[1](url)]
+  if (singleLinkEnd === closeIndex) {
+    return "citation-wrapper";
+  }
+
+  // Wrapped markdown link list: [[1](a), [2](b)]
   const listMatch = parseBracketedMarkdownLinkListAt(text, openIndex);
   if (listMatch && listMatch.end === closeIndex + 1) {
-    return "citation-wrapper";
-  }
-
-  // Check if it's wrapped markdown link: [[link](url)]] or [[link](url)]
-  // Note: parseMarkdownLinkAt checks starting from a given position, but we need
-  // to account for the [[ prefix. Test if there's a markdown link after [[
-  const innerStart = openIndex + 2;
-  const linkEnd = parseMarkdownLinkAt(text, innerStart);
-  
-  if (linkEnd !== null && (linkEnd === closeIndex || linkEnd === closeIndex + 1)) {
-    // We have [[link](url)]] (linkEnd at closeIndex+1) 
-    // or [[link](url)] (linkEnd at closeIndex)
-    return "citation-wrapper";
-  }
-
-  // Check if it's a simple wrapped reference: [[text]]
-  // Fallback: if it starts with [[ and ends with ]], it's a citation-wrapper
-  if (text[closeIndex - 1] === "]") {
     return "citation-wrapper";
   }
 
@@ -212,16 +201,13 @@ function normalizeBracketedReferences(text) {
       // Stop processing to prevent DoS; return text as-is
       break;
     }
-    // First pass: unwrap bracketed markdown link lists
-    let afterListUnwrap = unwrapBracketedMarkdownLinkList(normalized);
-    
-    // Second pass: scan for citation-wrappers and transform them
+    // Scan for citation-wrappers and transform them
     let result = "";
     let cursor = 0;
 
-    while (cursor < afterListUnwrap.length) {
-      if (afterListUnwrap[cursor] !== "[") {
-        result += afterListUnwrap[cursor];
+    while (cursor < normalized.length) {
+      if (normalized[cursor] !== "[") {
+        result += normalized[cursor];
         cursor += 1;
         continue;
       }
@@ -230,10 +216,10 @@ function normalizeBracketedReferences(text) {
       let closeIndex = -1;
       let depth = 0;
 
-      for (let i = cursor; i < afterListUnwrap.length; i += 1) {
-        if (afterListUnwrap[i] === "[") {
+      for (let i = cursor; i < normalized.length; i += 1) {
+        if (normalized[i] === "[") {
           depth += 1;
-        } else if (afterListUnwrap[i] === "]") {
+        } else if (normalized[i] === "]") {
           depth -= 1;
           if (depth === 0) {
             closeIndex = i;
@@ -244,35 +230,19 @@ function normalizeBracketedReferences(text) {
 
       if (closeIndex === -1) {
         // Unclosed bracket, leave as is
-        result += afterListUnwrap[cursor];
+        result += normalized[cursor];
         cursor += 1;
         continue;
       }
 
       // Classify and transform if needed
-      const span = afterListUnwrap.slice(cursor, closeIndex + 1);
-      const classification = classifyBracketedSpan(afterListUnwrap, cursor, closeIndex);
+      const span = normalized.slice(cursor, closeIndex + 1);
+      const classification = classifyBracketedSpan(normalized, cursor, closeIndex);
 
       if (classification === "citation-wrapper") {
-        // Apply transformations only for wrapped patterns
-        // [[text]] → [text]
-        // [[link](url)]] → [link](url)
-        // [[link1, link2]] → [link1, link2]
-        
-        if (span.startsWith("[[")) {
-          let inner = span.slice(2); // Remove opening [[
-          
-          // Remove closing ]] if present
-          if (inner.endsWith("]]")) {
-            inner = inner.slice(0, -2) + "]";
-          } else if (inner.endsWith("]") && !inner.endsWith("]]")) {
-            // Single ] case - just keep as is (already has one ])
-          }
-          
-          result += "[" + inner;
-        } else {
-          result += span;
-        }
+        // Escape only outer wrapper brackets: [[1](a), [2](b)] -> \[[1](a), [2](b)\]
+        const inner = span.slice(1, -1);
+        result += `\\[${inner}\\]`;
       } else {
         // Keep as is for valid-markdown or unrelated
         result += span;
