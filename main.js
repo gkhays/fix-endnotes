@@ -96,29 +96,87 @@ var require_normalize = __commonJS({
       }
       return mutated ? result : text;
     }
-    function normalizeBracketedSegment(segment) {
-      const unwrappedList = unwrapBracketedMarkdownLinkList(segment);
-      if (unwrappedList !== segment) {
-        return unwrappedList;
+    function classifyBracketedSpan(text, openIndex, closeIndex) {
+      if (text[openIndex] !== "[" || text[closeIndex] !== "]") {
+        return "unrelated";
       }
-      if (!segment.startsWith("[[") || !segment.endsWith("]]") && !segment.endsWith("]")) {
-        return segment;
+      if (text[openIndex + 1] !== "[") {
+        const markdownLinkMatch = parseMarkdownLinkAt(text, openIndex);
+        if (markdownLinkMatch === closeIndex + 1) {
+          return "valid-markdown";
+        }
+        return "unrelated";
       }
-      const wrappedMarkdownLink = segment.match(/^\[\[([\s\S]+\]\([^\)\n]+\))\]\]$/);
-      if (wrappedMarkdownLink) {
-        return wrappedMarkdownLink[1];
+      const listMatch = parseBracketedMarkdownLinkListAt(text, openIndex);
+      if (listMatch && listMatch.end === closeIndex + 1) {
+        return "citation-wrapper";
       }
-      const singlyWrappedMarkdownLink = segment.match(/^\[\[([\s\S]+\]\([^\)\n]+\))\]$/);
-      if (singlyWrappedMarkdownLink) {
-        return `[${singlyWrappedMarkdownLink[1]}`;
+      const innerStart = openIndex + 2;
+      const linkEnd = parseMarkdownLinkAt(text, innerStart);
+      if (linkEnd !== null && (linkEnd === closeIndex || linkEnd === closeIndex + 1)) {
+        return "citation-wrapper";
       }
-      const wrappedReference = segment.match(/^\[\[([\s\S]+?)\]\]$/);
-      if (wrappedReference) {
-        return `[${wrappedReference[1]}]`;
+      if (text[closeIndex - 1] === "]") {
+        return "citation-wrapper";
       }
-      return segment;
+      return "unrelated";
     }
     function normalizeBracketedReferences2(text) {
+      let normalized = text;
+      for (let iteration = 0; iteration < 5; iteration += 1) {
+        let afterListUnwrap = unwrapBracketedMarkdownLinkList(normalized);
+        let result = "";
+        let cursor = 0;
+        while (cursor < afterListUnwrap.length) {
+          if (afterListUnwrap[cursor] !== "[") {
+            result += afterListUnwrap[cursor];
+            cursor += 1;
+            continue;
+          }
+          let closeIndex = -1;
+          let depth = 0;
+          for (let i = cursor; i < afterListUnwrap.length; i += 1) {
+            if (afterListUnwrap[i] === "[") {
+              depth += 1;
+            } else if (afterListUnwrap[i] === "]") {
+              depth -= 1;
+              if (depth === 0) {
+                closeIndex = i;
+                break;
+              }
+            }
+          }
+          if (closeIndex === -1) {
+            result += afterListUnwrap[cursor];
+            cursor += 1;
+            continue;
+          }
+          const span = afterListUnwrap.slice(cursor, closeIndex + 1);
+          const classification = classifyBracketedSpan(afterListUnwrap, cursor, closeIndex);
+          if (classification === "citation-wrapper") {
+            if (span.startsWith("[[")) {
+              let inner = span.slice(2);
+              if (inner.endsWith("]]")) {
+                inner = inner.slice(0, -2) + "]";
+              } else if (inner.endsWith("]") && !inner.endsWith("]]")) {
+              }
+              result += "[" + inner;
+            } else {
+              result += span;
+            }
+          } else {
+            result += span;
+          }
+          cursor = closeIndex + 1;
+        }
+        if (result === normalized) {
+          break;
+        }
+        normalized = result;
+      }
+      return normalized;
+    }
+    function normalizeBracketedReferencesLegacy(text) {
       let normalized = text;
       for (let iteration = 0; iteration < 5; iteration += 1) {
         const next = unwrapBracketedMarkdownLinkList(normalized).replace(/\[\[([\s\S]+\]\([^\)\n]+\))\]\]/g, (_match, link) => link).replace(/\[\[([\s\S]+\]\([^\)\n]+\))\]/g, (_match, link) => `[${link}`).replace(/\[\[([\s\S]+?)\]\]/g, (_match, reference) => `[${reference}]`);
@@ -129,11 +187,16 @@ var require_normalize = __commonJS({
       }
       return normalized;
     }
+    function normalizeBracketedSegment(segment) {
+      return normalizeBracketedReferences2(segment);
+    }
     module2.exports = {
       isMarkdownLink,
       unwrapBracketedMarkdownLinkList,
       normalizeBracketedSegment,
-      normalizeBracketedReferences: normalizeBracketedReferences2
+      normalizeBracketedReferences: normalizeBracketedReferences2,
+      classifyBracketedSpan,
+      normalizeBracketedReferencesLegacy
     };
   }
 });
