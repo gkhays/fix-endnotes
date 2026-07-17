@@ -221,3 +221,20 @@ test("result is idempotent: normalizing twice gives same output", () => {
     );
   });
 });
+
+test("DoS protection: stops processing extremely deep nesting", () => {
+  // Create deeply nested citations (9 levels, exceeds MAX_NESTING_DEPTH of 8)
+  const deepNesting = "[[[[[[[[[ref]]]]]]]]]";
+  const result = normalizeBracketedReferences(deepNesting);
+  // Should return text as-is because nesting exceeds safety limit
+  assert.equal(result, deepNesting);
+});
+
+test("DoS protection: processes normal deep nesting up to limit", () => {
+  // Create nesting within the limit but less than 5 iterations needed for full unwrap
+  // (5 iterations max means we can unwrap up to 5 layers)
+  const normalDeepNesting = "[[[[[[ref]]]]]]";  // 6 levels, unwraps to [ref] in 5 iterations
+  const result = normalizeBracketedReferences(normalDeepNesting);
+  // Should process normally and unwrap to [ref]
+  assert.equal(result, "[ref]");
+});

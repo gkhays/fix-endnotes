@@ -10,6 +10,7 @@ var __commonJS = (cb, mod) => function __require() {
 // src/normalize.js
 var require_normalize = __commonJS({
   "src/normalize.js"(exports2, module2) {
+    var MAX_NESTING_DEPTH = 8;
     function isMarkdownLink(text) {
       return /^\[[^\]\n]+\]\([^\)\n]+\)$/.test(text);
     }
@@ -96,6 +97,15 @@ var require_normalize = __commonJS({
       }
       return mutated ? result : text;
     }
+    function detectMaxNestingDepth(text, startIndex) {
+      let depth = 0;
+      let cursor = startIndex;
+      while (cursor < text.length && text[cursor] === "[") {
+        depth += 1;
+        cursor += 1;
+      }
+      return depth;
+    }
     function classifyBracketedSpan(text, openIndex, closeIndex) {
       if (text[openIndex] !== "[" || text[closeIndex] !== "]") {
         return "unrelated";
@@ -124,6 +134,19 @@ var require_normalize = __commonJS({
     function normalizeBracketedReferences2(text) {
       let normalized = text;
       for (let iteration = 0; iteration < 5; iteration += 1) {
+        let hasExcessiveNesting = false;
+        for (let i = 0; i < normalized.length; i += 1) {
+          if (normalized[i] === "[") {
+            const depth = detectMaxNestingDepth(normalized, i);
+            if (depth > MAX_NESTING_DEPTH) {
+              hasExcessiveNesting = true;
+              break;
+            }
+          }
+        }
+        if (hasExcessiveNesting) {
+          break;
+        }
         let afterListUnwrap = unwrapBracketedMarkdownLinkList(normalized);
         let result = "";
         let cursor = 0;

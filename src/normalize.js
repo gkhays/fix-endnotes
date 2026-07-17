@@ -1,3 +1,6 @@
+// TODO: Consider making this a user-configurable option in settings
+const MAX_NESTING_DEPTH = 8;
+
 function isMarkdownLink(text) {
   return /^\[[^\]\n]+\]\([^\)\n]+\)$/.test(text);
 }
@@ -115,6 +118,20 @@ function unwrapBracketedMarkdownLinkList(text) {
 }
 
 /**
+ * Detect the maximum nesting depth of brackets at the start of a span.
+ * Returns the number of consecutive opening brackets: "[[[text]]" → 3
+ */
+function detectMaxNestingDepth(text, startIndex) {
+  let depth = 0;
+  let cursor = startIndex;
+  while (cursor < text.length && text[cursor] === "[") {
+    depth += 1;
+    cursor += 1;
+  }
+  return depth;
+}
+
+/**
  * Classify a bracketed span [content] into one of three categories:
  * - 'citation-wrapper': Transform (remove outer brackets)
  * - 'valid-markdown': Preserve (valid markdown link or link list)
@@ -170,12 +187,31 @@ function classifyBracketedSpan(text, openIndex, closeIndex) {
  * Parser-guided iterative normalization. (DEFAULT AS OF PHASE 4)
  * Runs multiple passes, classifying and transforming citation-wrappers each time.
  * This matches the legacy iterative approach but with explicit classification.
+ * 
+ * DoS Protection: Detects deeply nested citations (>8 levels) and stops processing
+ * to avoid unbounded iteration. Extremely deep nesting is unusual for normal citations.
  */
 function normalizeBracketedReferences(text) {
   let normalized = text;
   
   // Run up to 5 passes to handle nested wrappers
   for (let iteration = 0; iteration < 5; iteration += 1) {
+    // Check for denial-of-service: extremely deep nesting
+    // Scan for any position where nesting exceeds the safety limit
+    let hasExcessiveNesting = false;
+    for (let i = 0; i < normalized.length; i += 1) {
+      if (normalized[i] === "[") {
+        const depth = detectMaxNestingDepth(normalized, i);
+        if (depth > MAX_NESTING_DEPTH) {
+          hasExcessiveNesting = true;
+          break;
+        }
+      }
+    }
+    if (hasExcessiveNesting) {
+      // Stop processing to prevent DoS; return text as-is
+      break;
+    }
     // First pass: unwrap bracketed markdown link lists
     let afterListUnwrap = unwrapBracketedMarkdownLinkList(normalized);
     
