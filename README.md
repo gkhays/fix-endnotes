@@ -43,8 +43,15 @@ npm run build
 ## Behavior
 
 - `[[reference]]` becomes `[reference]`
-- `[[[source](https://example.com)]]` becomes `[source](https://example.com)`
-- Text outside the selected range is not modified
+- `[[[source](https://example.com)]]` becomes `[[source](https://example.com)]` (one outer wrapper removed)
+- `[[1](https://a.example), [2](https://b.example)]` becomes `[1](https://a.example), [2](https://b.example)`
+- Valid markdown links like `[source](https://example.com)` are preserved
+- Text outside the selected range is not modified, and running the command repeatedly is idempotent
+
+Current limitations:
+
+- Single-link wrapper forms like `[[1](https://example.com)]` are currently preserved as-is
+- Extremely deep bracket nesting (more than 8 leading `[` characters) is left unchanged as a safety guard
 
 ## Requirements
 
