@@ -65,3 +65,50 @@ Provide a fast, low-friction way to reformat end notes as links from the current
 2. The normalization logic should be deterministic and easy to test in isolation.
 3. The command handler should be small, with transformation logic separated from UI wiring.
 
+## 9. Normalization Contract (Phase 1)
+
+### 9.1 Malformed Citation-Wrapper Pattern (MATCH CONTRACT)
+
+A malformed citation-wrapper is a bracketed construct that must be normalized. It matches one of:
+
+1. **Simple wrapped reference**: `[[text]]` → `[text]`
+   - Pattern: `[[` + any non-bracket content + `]]`
+   - Example: `[[wikilink]]` → `[wikilink]`
+
+2. **Wrapped markdown link**: `[[link](url)]]` → `[link](url)`
+   - Pattern: `[[` + markdown link `[label](url)` + `]]`
+   - Handles nested URL parentheses: `[[label](url_(v1))]` → `[label](url_(v1))`
+
+3. **Wrapped markdown link list**: `[[link1, link2, ...]]` → `[link1, link2, ...]`
+   - Pattern: `[[` + comma-separated markdown links + `]]` or `]`
+   - Example: `[[1](a), [2](b)]` → `[1](a), [2](b)`
+
+4. **Partially wrapped markdown link**: `[[link](url)]` → `[link](url)`
+   - Pattern: `[[` + markdown link + `]` (single trailing bracket)
+
+### 9.2 Preservation Contract (NON-MATCH CONTRACT)
+
+The following constructs must NOT be modified:
+
+1. **Valid markdown links without outer wrapper**: `[link](url)` → unchanged
+2. **Valid markdown link lists without outer wrapper**: `[1](a), [2](b)` → unchanged
+3. **Unrelated bracketed text**: `array[0]`, `list[index]` → unchanged
+4. **Single square bracket pairs**: `[text]` → unchanged
+5. **URLs with nested parentheses**: `[text](url_(v1)_(v2))` → unchanged
+
+### 9.3 Idempotency Requirement
+
+Normalization must be idempotent: running it twice on any text must produce identical output.
+
+- Example: `normalizeBracketedReferences(normalizeBracketedReferences(input)) === normalizeBracketedReferences(input)`
+- This ensures repeated operations don't further degrade the text.
+
+### 9.4 Known Limitations of Legacy Approach
+
+The current regex-based iteration approach has these limitations:
+
+1. Cannot distinguish between wiki links (`[[wikilink]]`) and wrapped simple references (`[[text]]`).
+2. Relies on iterative global replacements (up to 5 iterations) which can mask ordering issues.
+3. Uses broad pattern matching that may overreach unintentionally.
+4. Does not explicitly track the three span categories: citation-wrapper vs. valid markdown vs. unrelated text.
+

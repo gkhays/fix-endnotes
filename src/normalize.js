@@ -1,3 +1,6 @@
+// TODO: Consider making this a user-configurable option in settings
+const MAX_NESTING_DEPTH = 8;
+
 function isMarkdownLink(text) {
   return /^\[[^\]\n]+\]\([^\)\n]+\)$/.test(text);
 }
@@ -114,39 +117,187 @@ function unwrapBracketedMarkdownLinkList(text) {
   return mutated ? result : text;
 }
 
-function normalizeBracketedSegment(segment) {
-  const unwrappedList = unwrapBracketedMarkdownLinkList(segment);
-
-  if (unwrappedList !== segment) {
-    return unwrappedList;
+/**
+ * Detect the maximum nesting depth of brackets at the start of a span.
+ * Returns the number of consecutive opening brackets: "[[[text]]" → 3
+ */
+function detectMaxNestingDepth(text, startIndex) {
+  let depth = 0;
+  let cursor = startIndex;
+  while (cursor < text.length && text[cursor] === "[") {
+    depth += 1;
+    cursor += 1;
   }
-
-  if (!segment.startsWith("[[") || (!segment.endsWith("]]" ) && !segment.endsWith("]"))) {
-    return segment;
-  }
-
-  const wrappedMarkdownLink = segment.match(/^\[\[([\s\S]+\]\([^\)\n]+\))\]\]$/);
-
-  if (wrappedMarkdownLink) {
-    return wrappedMarkdownLink[1];
-  }
-
-  const singlyWrappedMarkdownLink = segment.match(/^\[\[([\s\S]+\]\([^\)\n]+\))\]$/);
-
-  if (singlyWrappedMarkdownLink) {
-    return `[${singlyWrappedMarkdownLink[1]}`;
-  }
-
-  const wrappedReference = segment.match(/^\[\[([\s\S]+?)\]\]$/);
-
-  if (wrappedReference) {
-    return `[${wrappedReference[1]}]`;
-  }
-
-  return segment;
+  return depth;
 }
 
+/**
+ * Classify a bracketed span [content] into one of three categories:
+ * - 'citation-wrapper': Transform (remove outer brackets)
+ * - 'valid-markdown': Preserve (valid markdown link or link list)
+ * - 'unrelated': Preserve (not a markdown construct)
+ */
+function classifyBracketedSpan(text, openIndex, closeIndex) {
+  if (text[openIndex] !== "[" || text[closeIndex] !== "]") {
+    return "unrelated";
+  }
+
+  // Must start with [[ to be a citation-wrapper
+  if (text[openIndex + 1] !== "[") {
+    // Could still be a valid markdown link: [label](url)
+    const markdownLinkMatch = parseMarkdownLinkAt(text, openIndex);
+    if (markdownLinkMatch === closeIndex + 1) {
+      return "valid-markdown";
+    }
+    return "unrelated";
+  }
+
+  // Starts with [[, so check what patterns it matches
+  
+  // Check if it's a bracketed markdown link list: [[links...]]
+  const listMatch = parseBracketedMarkdownLinkListAt(text, openIndex);
+  if (listMatch && listMatch.end === closeIndex + 1) {
+    return "citation-wrapper";
+  }
+
+  // Check if it's wrapped markdown link: [[link](url)]] or [[link](url)]
+  // Note: parseMarkdownLinkAt checks starting from a given position, but we need
+  // to account for the [[ prefix. Test if there's a markdown link after [[
+  const innerStart = openIndex + 2;
+  const linkEnd = parseMarkdownLinkAt(text, innerStart);
+  
+  if (linkEnd !== null && (linkEnd === closeIndex || linkEnd === closeIndex + 1)) {
+    // We have [[link](url)]] (linkEnd at closeIndex+1) 
+    // or [[link](url)] (linkEnd at closeIndex)
+    return "citation-wrapper";
+  }
+
+  // Check if it's a simple wrapped reference: [[text]]
+  // Fallback: if it starts with [[ and ends with ]], it's a citation-wrapper
+  if (text[closeIndex - 1] === "]") {
+    return "citation-wrapper";
+  }
+
+  return "unrelated";
+}
+
+// Phase 4: Switched default to parser-guided normalization
+
+/**
+ * Parser-guided iterative normalization. (DEFAULT AS OF PHASE 4)
+ * Runs multiple passes, classifying and transforming citation-wrappers each time.
+ * This matches the legacy iterative approach but with explicit classification.
+ * 
+ * DoS Protection: Detects deeply nested citations (>8 levels) and stops processing
+ * to avoid unbounded iteration. Extremely deep nesting is unusual for normal citations.
+ */
 function normalizeBracketedReferences(text) {
+  let normalized = text;
+  
+  // Run up to 5 passes to handle nested wrappers
+  for (let iteration = 0; iteration < 5; iteration += 1) {
+    // Check for denial-of-service: extremely deep nesting
+    // Scan for any position where nesting exceeds the safety limit
+    let hasExcessiveNesting = false;
+    for (let i = 0; i < normalized.length; i += 1) {
+      if (normalized[i] === "[") {
+        const depth = detectMaxNestingDepth(normalized, i);
+        if (depth > MAX_NESTING_DEPTH) {
+          hasExcessiveNesting = true;
+          break;
+        }
+      }
+    }
+    if (hasExcessiveNesting) {
+      // Stop processing to prevent DoS; return text as-is
+      break;
+    }
+    // First pass: unwrap bracketed markdown link lists
+    let afterListUnwrap = unwrapBracketedMarkdownLinkList(normalized);
+    
+    // Second pass: scan for citation-wrappers and transform them
+    let result = "";
+    let cursor = 0;
+
+    while (cursor < afterListUnwrap.length) {
+      if (afterListUnwrap[cursor] !== "[") {
+        result += afterListUnwrap[cursor];
+        cursor += 1;
+        continue;
+      }
+
+      // Find matching closing bracket
+      let closeIndex = -1;
+      let depth = 0;
+
+      for (let i = cursor; i < afterListUnwrap.length; i += 1) {
+        if (afterListUnwrap[i] === "[") {
+          depth += 1;
+        } else if (afterListUnwrap[i] === "]") {
+          depth -= 1;
+          if (depth === 0) {
+            closeIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (closeIndex === -1) {
+        // Unclosed bracket, leave as is
+        result += afterListUnwrap[cursor];
+        cursor += 1;
+        continue;
+      }
+
+      // Classify and transform if needed
+      const span = afterListUnwrap.slice(cursor, closeIndex + 1);
+      const classification = classifyBracketedSpan(afterListUnwrap, cursor, closeIndex);
+
+      if (classification === "citation-wrapper") {
+        // Apply transformations only for wrapped patterns
+        // [[text]] → [text]
+        // [[link](url)]] → [link](url)
+        // [[link1, link2]] → [link1, link2]
+        
+        if (span.startsWith("[[")) {
+          let inner = span.slice(2); // Remove opening [[
+          
+          // Remove closing ]] if present
+          if (inner.endsWith("]]")) {
+            inner = inner.slice(0, -2) + "]";
+          } else if (inner.endsWith("]") && !inner.endsWith("]]")) {
+            // Single ] case - just keep as is (already has one ])
+          }
+          
+          result += "[" + inner;
+        } else {
+          result += span;
+        }
+      } else {
+        // Keep as is for valid-markdown or unrelated
+        result += span;
+      }
+
+      cursor = closeIndex + 1;
+    }
+
+    // Check if we made progress
+    if (result === normalized) {
+      break;
+    }
+
+    normalized = result;
+  }
+
+  return normalized;
+}
+
+/**
+ * Legacy regex-based iterative normalization. (KEPT FOR REFERENCE/COMPARISON)
+ * Use normalizeBracketedReferences() as the default; this is for comparison only.
+ * @deprecated Use normalizeBracketedReferences() instead.
+ */
+function normalizeBracketedReferencesLegacy(text) {
   let normalized = text;
 
   for (let iteration = 0; iteration < 5; iteration += 1) {
@@ -165,9 +316,20 @@ function normalizeBracketedReferences(text) {
   return normalized;
 }
 
+/**
+ * Normalize a bracketed segment in isolation.
+ * Used for testing single segments.
+ * This is kept for backward compatibility but should prefer normalizeBracketedReferences().
+ */
+function normalizeBracketedSegment(segment) {
+  return normalizeBracketedReferences(segment);
+}
+
 module.exports = {
   isMarkdownLink,
   unwrapBracketedMarkdownLinkList,
   normalizeBracketedSegment,
   normalizeBracketedReferences,
+  classifyBracketedSpan,
+  normalizeBracketedReferencesLegacy,
 };
