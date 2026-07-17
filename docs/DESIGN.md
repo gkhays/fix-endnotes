@@ -1,6 +1,6 @@
 # Fix End Notes Obsidian Plugin
 
-When researching technical issues, AI-assistants frequently provide references to sources. This is valuable information we wish to preserve. However, Gemini and other AI searches encode notes or references with an additional set of outer square braces. We wish to remove these.
+When researching technical issues, AI-assistants frequently provide references to sources. This is valuable information we wish to preserve. However, Gemini and other AI searches can encode citations with an additional decorative set of outer square braces. For properly formatted markdown citation links, we preserve the inner links and escape the outer braces so they render correctly in Markdown and Obsidian.
 
 ## 1. Overview
 
@@ -16,7 +16,7 @@ Provide a fast, low-friction way to reformat end notes as links from the current
 
 1. Trigger the task from the Obsidian command palette.
 2. Operate only on the currently selected text in the active editor.
-3. Remove redundant outer square brackets from end notes and references while preserving the underlying link target or reference text.
+3. For properly formatted markdown citation links wrapped by decorative outer square brackets, escape only the outer brackets while preserving the underlying links.
 4. Preserve all non-target text, spacing, and line breaks.
 5. Replace the selection in place with the normalized text.
 
@@ -39,23 +39,23 @@ Provide a fast, low-friction way to reformat end notes as links from the current
 1. The plugin must register a command that is visible in the Command Palette.
 2. The plugin must read the current selection from the active editor.
 3. If no text is selected, the plugin must do nothing and show a brief notice to the user.
-4. The plugin must normalize bracketed references by removing only redundant outer `[]` characters.
+4. The plugin must normalize citation wrappers by escaping only redundant decorative outer `[]` characters as `\[` and `\]`.
 5. The plugin must not modify content outside the selected range.
-6. The plugin must preserve the original link text or reference text inside the outer brackets.
+6. The plugin must preserve the original markdown links inside the outer brackets without changing labels, URLs, ordering, punctuation, spacing, or line breaks.
 
 ## 6. Examples
 
 | Input | Output |
 | --- | --- |
-| `[[reference]]` | `[reference]` |
-| `[[[source](https://example.com)]]` | `[source](https://example.com)` |
-| `before [[note]] after` | `before [note] after` |
+| `[[1](https://example.com)]` | `\[[1](https://example.com)\]` |
+| `[[1](https://a.example), [2](https://b.example)]` | `\[[1](https://a.example), [2](https://b.example)\]` |
+| `before [[1](https://a.example), [2](https://b.example)] after` | `before \[[1](https://a.example), [2](https://b.example)\] after` |
 
 ## 7. Acceptance Criteria
 
 1. A user can invoke the command from the Command Palette.
 2. A non-empty selection is rewritten in place.
-3. Excess bracket nesting is removed without altering the inner reference.
+3. Decorative outer citation brackets are escaped without altering inner markdown links.
 4. Empty selections are handled safely with no edit applied.
 5. The plugin does not change unrelated text in the editor.
 
@@ -67,24 +67,20 @@ Provide a fast, low-friction way to reformat end notes as links from the current
 
 ## 9. Normalization Contract (Phase 1)
 
-### 9.1 Malformed Citation-Wrapper Pattern (MATCH CONTRACT)
+### 9.1 Citation-Wrapper Pattern (MATCH CONTRACT)
 
-A malformed citation-wrapper is a bracketed construct that must be normalized. It matches one of:
+A citation-wrapper in scope is a decorative outer square-bracket wrapper around properly formatted markdown citation links. It must be normalized by escaping only the outer wrapper.
 
-1. **Simple wrapped reference**: `[[text]]` → `[text]`
-   - Pattern: `[[` + any non-bracket content + `]]`
-   - Example: `[[wikilink]]` → `[wikilink]`
+1. **Single citation link wrapper**: `[[1](url)]` → `\[[1](url)\]`
+   - Pattern: outer `[` + inner markdown link + outer `]`
+   - Inner markdown link is preserved exactly.
 
-2. **Wrapped markdown link**: `[[link](url)]]` → `[link](url)`
-   - Pattern: `[[` + markdown link `[label](url)` + `]]`
-   - Handles nested URL parentheses: `[[label](url_(v1))]` → `[label](url_(v1))`
+2. **Citation link list wrapper**: `[[1](a), [2](b)]` → `\[[1](a), [2](b)\]`
+   - Pattern: outer `[` + comma-separated markdown links + outer `]`
+   - Inner markdown links are preserved exactly.
 
-3. **Wrapped markdown link list**: `[[link1, link2, ...]]` → `[link1, link2, ...]`
-   - Pattern: `[[` + comma-separated markdown links + `]]` or `]`
-   - Example: `[[1](a), [2](b)]` → `[1](a), [2](b)`
-
-4. **Partially wrapped markdown link**: `[[link](url)]` → `[link](url)`
-   - Pattern: `[[` + markdown link + `]` (single trailing bracket)
+3. **Nested URL parentheses are preserved**
+   - Example: `[[1](https://example.com/path_(v1))]` → `\[[1](https://example.com/path_(v1))\]`
 
 ### 9.2 Preservation Contract (NON-MATCH CONTRACT)
 
@@ -92,9 +88,10 @@ The following constructs must NOT be modified:
 
 1. **Valid markdown links without outer wrapper**: `[link](url)` → unchanged
 2. **Valid markdown link lists without outer wrapper**: `[1](a), [2](b)` → unchanged
-3. **Unrelated bracketed text**: `array[0]`, `list[index]` → unchanged
-4. **Single square bracket pairs**: `[text]` → unchanged
-5. **URLs with nested parentheses**: `[text](url_(v1)_(v2))` → unchanged
+3. **Already escaped citation wrappers**: `\[[1](a), [2](b)\]` → unchanged
+4. **Intentional wiki-links and unrelated bracketed text**: `[[wikilink]]`, `array[0]`, `list[index]` → unchanged
+5. **Single square bracket pairs**: `[text]` → unchanged
+6. **URLs with nested parentheses**: `[text](url_(v1)_(v2))` → unchanged
 
 ### 9.3 Idempotency Requirement
 
@@ -107,8 +104,8 @@ Normalization must be idempotent: running it twice on any text must produce iden
 
 The current regex-based iteration approach has these limitations:
 
-1. Cannot distinguish between wiki links (`[[wikilink]]`) and wrapped simple references (`[[text]]`).
+1. Cannot reliably distinguish citation wrappers from wiki links (`[[wikilink]]`) in all cases.
 2. Relies on iterative global replacements (up to 5 iterations) which can mask ordering issues.
 3. Uses broad pattern matching that may overreach unintentionally.
-4. Does not explicitly track the three span categories: citation-wrapper vs. valid markdown vs. unrelated text.
+4. Does not explicitly track the three span categories: citation-wrapper (escape), valid markdown/unrelated text (preserve), malformed/unknown (preserve unless in scope).
 

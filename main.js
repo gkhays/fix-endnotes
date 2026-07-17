@@ -110,23 +110,19 @@ var require_normalize = __commonJS({
       if (text[openIndex] !== "[" || text[closeIndex] !== "]") {
         return "unrelated";
       }
-      if (text[openIndex + 1] !== "[") {
-        const markdownLinkMatch = parseMarkdownLinkAt(text, openIndex);
-        if (markdownLinkMatch === closeIndex + 1) {
-          return "valid-markdown";
-        }
+      const markdownLinkMatch = parseMarkdownLinkAt(text, openIndex);
+      if (markdownLinkMatch === closeIndex + 1) {
+        return "valid-markdown";
+      }
+      const singleLinkEnd = parseMarkdownLinkAt(text, openIndex + 1);
+      if (singleLinkEnd === null) {
         return "unrelated";
+      }
+      if (singleLinkEnd === closeIndex) {
+        return "citation-wrapper";
       }
       const listMatch = parseBracketedMarkdownLinkListAt(text, openIndex);
       if (listMatch && listMatch.end === closeIndex + 1) {
-        return "citation-wrapper";
-      }
-      const innerStart = openIndex + 2;
-      const linkEnd = parseMarkdownLinkAt(text, innerStart);
-      if (linkEnd !== null && (linkEnd === closeIndex || linkEnd === closeIndex + 1)) {
-        return "citation-wrapper";
-      }
-      if (text[closeIndex - 1] === "]") {
         return "citation-wrapper";
       }
       return "unrelated";
@@ -147,21 +143,20 @@ var require_normalize = __commonJS({
         if (hasExcessiveNesting) {
           break;
         }
-        let afterListUnwrap = unwrapBracketedMarkdownLinkList(normalized);
         let result = "";
         let cursor = 0;
-        while (cursor < afterListUnwrap.length) {
-          if (afterListUnwrap[cursor] !== "[") {
-            result += afterListUnwrap[cursor];
+        while (cursor < normalized.length) {
+          if (normalized[cursor] !== "[") {
+            result += normalized[cursor];
             cursor += 1;
             continue;
           }
           let closeIndex = -1;
           let depth = 0;
-          for (let i = cursor; i < afterListUnwrap.length; i += 1) {
-            if (afterListUnwrap[i] === "[") {
+          for (let i = cursor; i < normalized.length; i += 1) {
+            if (normalized[i] === "[") {
               depth += 1;
-            } else if (afterListUnwrap[i] === "]") {
+            } else if (normalized[i] === "]") {
               depth -= 1;
               if (depth === 0) {
                 closeIndex = i;
@@ -170,23 +165,15 @@ var require_normalize = __commonJS({
             }
           }
           if (closeIndex === -1) {
-            result += afterListUnwrap[cursor];
+            result += normalized[cursor];
             cursor += 1;
             continue;
           }
-          const span = afterListUnwrap.slice(cursor, closeIndex + 1);
-          const classification = classifyBracketedSpan(afterListUnwrap, cursor, closeIndex);
+          const span = normalized.slice(cursor, closeIndex + 1);
+          const classification = classifyBracketedSpan(normalized, cursor, closeIndex);
           if (classification === "citation-wrapper") {
-            if (span.startsWith("[[")) {
-              let inner = span.slice(2);
-              if (inner.endsWith("]]")) {
-                inner = inner.slice(0, -2) + "]";
-              } else if (inner.endsWith("]") && !inner.endsWith("]]")) {
-              }
-              result += "[" + inner;
-            } else {
-              result += span;
-            }
+            const inner = span.slice(1, -1);
+            result += `\\[${inner}\\]`;
           } else {
             result += span;
           }
